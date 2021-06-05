@@ -1,0 +1,76 @@
+#include <stdlib.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <unistd.h>
+#include <stdio.h>
+
+#include "addrlist.h"
+
+int main(int argc, char const *argv[]) {
+    
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    int csock = 0;
+    struct sockaddr_in tolisten = {.sin_addr = 0, .sin_family = AF_INET, .sin_port = htons(8080)};
+    struct sockaddr_in caddr = {};
+    socklen_t socksize = 0;
+    
+    /* statical way (generated with generate.py) */
+
+    addrlist_list_t whitelist = {
+        (addrlist_entry_t[]) {
+            /* 127.0.0.1/8 */ {{(uint8_t[]){127,0,0,1}, IPV4},8},
+        },
+        1
+    };
+
+    /* // dynamical way //
+    addrlist_list_t whitelist = {NULL, 0};
+
+    addrlist_addAddrStr("127.0.0.0/8", &whitelist); */
+
+    if (sock<0)
+        return __LINE__;
+    
+    if(bind(sock, (struct sockaddr *)&tolisten, sizeof(tolisten))<0) {
+        perror("bind");
+        close(sock);
+        return __LINE__;
+    }
+
+    if(listen(sock, 5)<0) {
+        perror("listen");
+        close(sock);
+        return __LINE__;
+    }
+
+    while (1) {
+        socksize = sizeof(struct sockaddr_in);
+        csock = accept(sock, (struct sockaddr *)&caddr, &socksize);
+        
+        if (addrlist_checkSockAddr((struct sockaddr *)&caddr, whitelist) != 1) {
+            write(
+                csock, 
+                "HTTP/1.1 401 Unauthorized\r\n"
+                "Content-Type: text/plain\r\n"
+                "Server: something\r\n"
+                "Connection: Close\r\n\r\n"
+                "Thou art not authorised!",
+                117
+            );
+        } else {
+            write(
+                csock, 
+                "HTTP/1.1 200 Authorized\r\n"
+                "Content-Type: text/plain\r\n"
+                "Server: something\r\n"
+                "Connection: Close\r\n\r\n"
+                "Thou art authorised!",
+                111
+            );
+        }
+
+        close(csock);
+    }
+
+    return 0;
+}
